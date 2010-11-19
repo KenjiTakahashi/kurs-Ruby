@@ -3,7 +3,6 @@
 # zad. 1
 
 require 'open-uri'
-require 'hpricot'
 
 class Przeglader
   def initialize
@@ -16,50 +15,54 @@ class Przeglader
   end
   def page_weight(page)
     begin
-      doc = Hpricot(open(page))
+      doc = open(page).read
     rescue OpenURI::HTTPError, URI::InvalidURIError, Errno::ETIMEDOUT
       "There was an error with your request"
     else
-      (doc/'img').size + (doc/'video').size + (doc/'applet').size
+      doc.scan(/<(img|video|applet).*?(\/>|(\/img|\/video|\/applet)?)/i).size
     end
   end
   def page_summary(page)
     begin
-      doc = Hpricot(open(page))
+      doc = open(page).read
     rescue OpenURI::HTTPError, URI::InvalidURIError, Errno::ETIMEDOUT
       "There was an error with your request"
     else
-      doc = Hpricot((doc/'head').inner_html)
-      results = ["Title: #{doc.at('title').inner_html}"]
-      (doc/'meta').each do |d|
-        if d['http-equiv']
-          results << "#{d['http-equiv']}: #{d['content']}"
-        else
-          results << "#{d['name']}: #{d['content']}"
+      results = []
+      if doc =~ /<title>.*?<\/title>/i
+        results << "Title: #{$&.gsub(/<.*?title>/i, '')}"
+      end
+      for res in doc.scan(/<meta.*?\/>/i)
+        if res =~ /name/i
+          results << self.reg_split(res, 'name')
+        elsif res =~ /http-equiv/i
+          results << self.reg_split(res, 'http-equiv')
         end
       end
     end
     results
   end
 protected
+  def reg_split(res, reg)
+    tmp = res.split(/#{reg}\s*?=\s*?("|')?/i).last.split(/("|')?\s*?content\s*?=\s*?("|')?/i)
+    "#{tmp[0]}: #{tmp.last.gsub(/("|')?\s*?\/?>?/i, '')}"
+  end
   def przeglad_aux(start, page, depth, block)
     if depth > 0
       begin
         p start + page
         @cache << page
-        h = open(start + page)
+        doc = open(start + page).read
       rescue OpenURI::HTTPError, URI::InvalidURIError, Errno::ETIMEDOUT
         nil
       else
-        doc = Hpricot(h)
-        (doc/'a').map { |link| link['href'].to_s }.each do |l|
+        for a in doc.scan(/href.*?<\/a>/i)
+          l = a.gsub(/(href\s*?=\s*?("|')|("|').*?>.*)/i, '')
           if not l =~ /^(mailto:|http:|https:|www.).*/i and not @cache.include?(l)
-            @results << block.call(h.read)
+            @results << block.call(doc)
             self.przeglad_aux(start, l, depth - 1, block)
           end
         end
-      ensure
-        h.close if h
       end
     else
       @results
@@ -68,6 +71,6 @@ protected
 end
 
 p = Przeglader.new
-#puts p.przeglad('http://www.ii.uni.wroc.pl/cms/', 3, lambda{ |x| return x })
+puts p.przeglad('http://www.ii.uni.wroc.pl/cms/', 3, lambda{ |x| return x })
 #puts p.page_summary('http://www.thecamels.org/')
-puts p.page_weight('http://www.thecamels.org/')
+#puts p.page_weight('http://www.thecamels.org/')
