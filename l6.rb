@@ -40,11 +40,11 @@ class Notatnik
   end
   def usun(name)
     if @pad.delete(name)
+      self.save
       "Usunieto"
     else
       "Nie ma takiego wpisu!"
     end
-    self.save
   end
 protected
   def save
